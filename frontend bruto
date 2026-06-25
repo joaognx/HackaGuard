@@ -1,0 +1,1024 @@
+import SwiftUI
+import Combine
+
+extension Color {
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        
+        let a, r, g, b: UInt64
+        
+        switch hex.count {
+        case 3:
+            (a, r, g, b) = (
+                255,
+                (int >> 8) * 17,
+                (int >> 4 & 0xF) * 17,
+                (int & 0xF) * 17
+            )
+        case 6:
+            (a, r, g, b) = (
+                255,
+                int >> 16,
+                int >> 8 & 0xFF,
+                int & 0xFF
+            )
+        case 8:
+            (a, r, g, b) = (
+                int >> 24,
+                int >> 16 & 0xFF,
+                int >> 8 & 0xFF,
+                int & 0xFF
+            )
+        default:
+            (a, r, g, b) = (255, 0, 0, 0)
+        }
+        
+        self.init(
+            .sRGB,
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue: Double(b) / 255,
+            opacity: Double(a) / 255
+        )
+    }
+}
+
+struct AppColors {
+    static let azulNoite = Color(hex: "#0B1220")
+    static let azulMarca = Color(hex: "#2563EB")
+    static let azulEscuro = Color(hex: "#1E3A8A")
+    static let azulSoft = Color(hex: "#DBEAFE")
+    
+    static let verdeSeguro = Color(hex: "#16A34A")
+    static let amareloAtencao = Color(hex: "#F59E0B")
+    static let vermelhoAlerta = Color(hex: "#DC2626")
+    
+    static let fundoClaro = Color(hex: "#F8FAFC")
+    static let cardClaro = Color(hex: "#F1F5F9")
+    static let textoPrincipal = Color(hex: "#0F172A")
+    static let textoSecundario = Color(hex: "#64748B")
+    static let branco = Color.white
+}
+
+struct HackaGuardData {
+    var status: String
+    var mensagem: String
+    var usuario: String
+    var rfidAutorizado: Bool
+    var distancia: Double
+    var gas: Int
+    var som: Int
+    var ultimoEvento: String
+}
+
+struct EventoHistorico: Identifiable {
+    let id = UUID()
+    var tipo: String
+    var titulo: String
+    var descricao: String
+    var horario: String
+    var cor: Color
+    var icone: String
+}
+
+class HackaGuardViewModel: ObservableObject {
+    @Published var sistemaArmado: Bool = true
+    
+    @Published var data = HackaGuardData(
+        status: "Casa segura",
+        mensagem: "Todos os sensores estão funcionando normalmente",
+        usuario: "Andrew",
+        rfidAutorizado: true,
+        distancia: 82,
+        gas: 230,
+        som: 120,
+        ultimoEvento: "Andrew entrou às 14:32"
+    )
+    
+    @Published var historico: [EventoHistorico] = [
+        EventoHistorico(
+            tipo: "Acesso",
+            titulo: "Entrada autorizada",
+            descricao: "Andrew entrou usando RFID",
+            horario: "14:32",
+            cor: AppColors.verdeSeguro,
+            icone: "person.badge.key.fill"
+        ),
+        EventoHistorico(
+            tipo: "Sistema",
+            titulo: "Casa segura",
+            descricao: "Todos os sensores estão normais",
+            horario: "14:20",
+            cor: AppColors.azulMarca,
+            icone: "checkmark.shield.fill"
+        ),
+        EventoHistorico(
+            tipo: "Sensor",
+            titulo: "Sensor de gás normal",
+            descricao: "Nenhum vapor elevado detectado",
+            horario: "14:10",
+            cor: AppColors.verdeSeguro,
+            icone: "wind"
+        ),
+        EventoHistorico(
+            tipo: "Sensor",
+            titulo: "Barulho baixo",
+            descricao: "Ambiente silencioso",
+            horario: "13:55",
+            cor: AppColors.verdeSeguro,
+            icone: "waveform"
+        ),
+        EventoHistorico(
+            tipo: "Sistema",
+            titulo: "Sistema iniciado",
+            descricao: "HackaGuard foi iniciado",
+            horario: "13:40",
+            cor: AppColors.azulMarca,
+            icone: "power"
+        )
+    ]
+    
+    func corStatus() -> Color {
+        let texto = data.status.lowercased()
+        
+        if texto.contains("alerta") || texto.contains("perigo") {
+            return AppColors.vermelhoAlerta
+        } else if texto.contains("atenção") {
+            return AppColors.amareloAtencao
+        } else {
+            return AppColors.verdeSeguro
+        }
+    }
+    
+    func iconeStatus() -> String {
+        let texto = data.status.lowercased()
+        
+        if texto.contains("alerta") || texto.contains("perigo") {
+            return "exclamationmark.triangle.fill"
+        } else if texto.contains("atenção") {
+            return "exclamationmark.circle.fill"
+        } else {
+            return "checkmark.shield.fill"
+        }
+    }
+    
+    func horaAtual() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: Date())
+    }
+    
+    func adicionarEvento(tipo: String, titulo: String, descricao: String, cor: Color, icone: String) {
+        let evento = EventoHistorico(
+            tipo: tipo,
+            titulo: titulo,
+            descricao: descricao,
+            horario: horaAtual(),
+            cor: cor,
+            icone: icone
+        )
+        
+        historico.insert(evento, at: 0)
+    }
+}
+
+struct ContentView: View {
+    @StateObject private var viewModel = HackaGuardViewModel()
+    @State private var mostrarSplash = true
+    
+    var body: some View {
+        ZStack {
+            if mostrarSplash {
+                SplashView()
+                    .onAppear {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            withAnimation {
+                                mostrarSplash = false
+                            }
+                        }
+                    }
+            } else {
+                MainTabView()
+                    .environmentObject(viewModel)
+            }
+        }
+    }
+}
+
+struct SplashView: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    AppColors.azulNoite,
+                    AppColors.azulEscuro,
+                    AppColors.azulMarca
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            
+            VStack(spacing: 22) {
+                ZStack {
+                    Circle()
+                        .fill(AppColors.branco.opacity(0.12))
+                        .frame(width: 130, height: 130)
+                    
+                    Image(systemName: "shield.lefthalf.filled")
+                        .font(.system(size: 80))
+                        .foregroundColor(AppColors.branco)
+                }
+                
+                Text("HackaGuard")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .foregroundColor(AppColors.branco)
+                
+                Text("Segurança residencial inteligente")
+                    .font(.headline)
+                    .foregroundColor(AppColors.branco.opacity(0.85))
+                
+                ProgressView()
+                    .tint(AppColors.branco)
+                    .padding(.top, 20)
+            }
+        }
+    }
+}
+
+struct MainTabView: View {
+    var body: some View {
+        TabView {
+            DashboardView()
+                .tabItem {
+                    Image(systemName: "house.fill")
+                    Text("Início")
+                }
+            
+            SensoresView()
+                .tabItem {
+                    Image(systemName: "sensor.tag.radiowaves.forward.fill")
+                    Text("Sensores")
+                }
+            
+            RFIDView()
+                .tabItem {
+                    Image(systemName: "person.badge.key.fill")
+                    Text("RFID")
+                }
+            
+            HistoricoView()
+                .tabItem {
+                    Image(systemName: "clock.fill")
+                    Text("Histórico")
+                }
+        }
+        .accentColor(AppColors.azulMarca)
+    }
+}
+
+struct DashboardView: View {
+    @EnvironmentObject var viewModel: HackaGuardViewModel
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 18) {
+                    HeaderHomeView()
+                    StatusCard()
+                    ModoSegurancaCard()
+                    UltimoEventoCard()
+                    
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Sensores ativos")
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .foregroundColor(AppColors.textoPrincipal)
+                        
+                        LazyVGrid(
+                            columns: [
+                                GridItem(.flexible()),
+                                GridItem(.flexible())
+                            ],
+                            spacing: 16
+                        ) {
+                            NavigationLink(destination: RFIDView()) {
+                                SensorResumoCard(
+                                    titulo: "RFID",
+                                    valor: viewModel.data.rfidAutorizado ? "Autorizado" : "Não lido",
+                                    status: viewModel.data.usuario,
+                                    icone: "person.badge.key.fill",
+                                    cor: viewModel.data.rfidAutorizado ? AppColors.verdeSeguro : AppColors.amareloAtencao,
+                                    progresso: viewModel.data.rfidAutorizado ? 1.0 : 0.4
+                                )
+                            }
+                            
+                            NavigationLink(destination: DistanciaDetalheView()) {
+                                SensorResumoCard(
+                                    titulo: "Distância",
+                                    valor: "\(Int(viewModel.data.distancia)) cm",
+                                    status: viewModel.data.distancia < 50 ? "Movimento" : "Normal",
+                                    icone: "ruler.fill",
+                                    cor: viewModel.data.distancia < 50 ? AppColors.amareloAtencao : AppColors.verdeSeguro,
+                                    progresso: min(viewModel.data.distancia / 200, 1.0)
+                                )
+                            }
+                            
+                            NavigationLink(destination: GasDetalheView()) {
+                                SensorResumoCard(
+                                    titulo: "Gás/Vapor",
+                                    valor: "\(viewModel.data.gas)",
+                                    status: viewModel.data.gas > 700 ? "Perigo" : viewModel.data.gas > 400 ? "Atenção" : "Normal",
+                                    icone: "wind",
+                                    cor: viewModel.data.gas > 700 ? AppColors.vermelhoAlerta : viewModel.data.gas > 400 ? AppColors.amareloAtencao : AppColors.verdeSeguro,
+                                    progresso: min(Double(viewModel.data.gas) / 1000, 1.0)
+                                )
+                            }
+                            
+                            NavigationLink(destination: SomDetalheView()) {
+                                SensorResumoCard(
+                                    titulo: "Som",
+                                    valor: "\(viewModel.data.som)",
+                                    status: viewModel.data.som > 600 ? "Alto" : viewModel.data.som > 350 ? "Moderado" : "Baixo",
+                                    icone: "waveform",
+                                    cor: viewModel.data.som > 600 ? AppColors.vermelhoAlerta : viewModel.data.som > 350 ? AppColors.amareloAtencao : AppColors.verdeSeguro,
+                                    progresso: min(Double(viewModel.data.som) / 1000, 1.0)
+                                )
+                            }
+                        }
+                    }
+                }
+                .padding()
+            }
+            .background(AppColors.fundoClaro)
+            .navigationTitle("HackaGuard")
+        }
+    }
+}
+
+struct HeaderHomeView: View {
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Bem-vindo")
+                    .font(.subheadline)
+                    .foregroundColor(AppColors.textoSecundario)
+                
+                Text("Central de monitoramento")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(AppColors.textoPrincipal)
+            }
+            
+            Spacer()
+            
+            ZStack {
+                Circle()
+                    .fill(AppColors.azulSoft)
+                    .frame(width: 52, height: 52)
+                
+                Image(systemName: "shield.lefthalf.filled")
+                    .font(.title2)
+                    .foregroundColor(AppColors.azulMarca)
+            }
+        }
+    }
+}
+
+struct StatusCard: View {
+    @EnvironmentObject var viewModel: HackaGuardViewModel
+    
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(systemName: viewModel.iconeStatus())
+                .font(.system(size: 60))
+                .foregroundColor(AppColors.branco)
+            
+            Text(viewModel.data.status)
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundColor(AppColors.branco)
+                .multilineTextAlignment(.center)
+            
+            Text(viewModel.data.mensagem)
+                .font(.body)
+                .foregroundColor(AppColors.branco.opacity(0.9))
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+        .background(
+            LinearGradient(
+                colors: [
+                    viewModel.corStatus(),
+                    viewModel.corStatus().opacity(0.78)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .cornerRadius(26)
+        .shadow(color: viewModel.corStatus().opacity(0.25), radius: 8, x: 0, y: 5)
+    }
+}
+
+struct ModoSegurancaCard: View {
+    @EnvironmentObject var viewModel: HackaGuardViewModel
+    
+    var body: some View {
+        HStack(spacing: 15) {
+            ZStack {
+                Circle()
+                    .fill(viewModel.sistemaArmado ? AppColors.verdeSeguro.opacity(0.13) : AppColors.amareloAtencao.opacity(0.13))
+                    .frame(width: 52, height: 52)
+                
+                Image(systemName: viewModel.sistemaArmado ? "lock.shield.fill" : "lock.open.fill")
+                    .font(.title2)
+                    .foregroundColor(viewModel.sistemaArmado ? AppColors.verdeSeguro : AppColors.amareloAtencao)
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Modo de segurança")
+                    .font(.headline)
+                    .foregroundColor(AppColors.textoPrincipal)
+                
+                Text(viewModel.sistemaArmado ? "Sistema armado" : "Sistema desarmado")
+                    .font(.subheadline)
+                    .foregroundColor(AppColors.textoSecundario)
+            }
+            
+            Spacer()
+            
+            Toggle("", isOn: $viewModel.sistemaArmado)
+                .labelsHidden()
+                .tint(AppColors.azulMarca)
+        }
+        .padding()
+        .background(AppColors.branco)
+        .cornerRadius(20)
+    }
+}
+
+struct UltimoEventoCard: View {
+    @EnvironmentObject var viewModel: HackaGuardViewModel
+    
+    var body: some View {
+        HStack(spacing: 15) {
+            Image(systemName: "clock.fill")
+                .font(.title2)
+                .foregroundColor(AppColors.azulMarca)
+                .frame(width: 45, height: 45)
+                .background(AppColors.azulSoft)
+                .cornerRadius(14)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Último evento")
+                    .font(.headline)
+                    .foregroundColor(AppColors.textoPrincipal)
+                
+                Text(viewModel.data.ultimoEvento)
+                    .font(.subheadline)
+                    .foregroundColor(AppColors.textoSecundario)
+            }
+            
+            Spacer()
+        }
+        .padding()
+        .background(AppColors.branco)
+        .cornerRadius(20)
+    }
+}
+
+struct SensorResumoCard: View {
+    var titulo: String
+    var valor: String
+    var status: String
+    var icone: String
+    var cor: Color
+    var progresso: Double
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: icone)
+                    .font(.title2)
+                    .foregroundColor(cor)
+                
+                Spacer()
+                
+                Circle()
+                    .fill(cor)
+                    .frame(width: 10, height: 10)
+            }
+            
+            Text(titulo)
+                .font(.headline)
+                .foregroundColor(AppColors.textoPrincipal)
+            
+            Text(valor)
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundColor(AppColors.textoPrincipal)
+            
+            Text(status)
+                .font(.caption)
+                .foregroundColor(AppColors.textoSecundario)
+            
+            ProgressView(value: progresso)
+                .tint(cor)
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .frame(height: 170)
+        .background(AppColors.branco)
+        .cornerRadius(22)
+    }
+}
+
+struct SensoresView: View {
+    @EnvironmentObject var viewModel: HackaGuardViewModel
+    
+    var body: some View {
+        NavigationView {
+            List {
+                Section("Sensores ambientais") {
+                    NavigationLink(destination: GasDetalheView()) {
+                        SensorLinha(
+                            nome: "Sensor de Gás/Vapor",
+                            valor: "\(viewModel.data.gas)",
+                            status: viewModel.data.gas > 700 ? "Perigo" : viewModel.data.gas > 400 ? "Atenção" : "Normal",
+                            icone: "wind",
+                            cor: viewModel.data.gas > 700 ? AppColors.vermelhoAlerta : viewModel.data.gas > 400 ? AppColors.amareloAtencao : AppColors.verdeSeguro
+                        )
+                    }
+                    
+                    NavigationLink(destination: SomDetalheView()) {
+                        SensorLinha(
+                            nome: "Sensor de Som",
+                            valor: "\(viewModel.data.som)",
+                            status: viewModel.data.som > 600 ? "Alto" : viewModel.data.som > 350 ? "Moderado" : "Baixo",
+                            icone: "waveform",
+                            cor: viewModel.data.som > 600 ? AppColors.vermelhoAlerta : viewModel.data.som > 350 ? AppColors.amareloAtencao : AppColors.verdeSeguro
+                        )
+                    }
+                }
+                
+                Section("Segurança de entrada") {
+                    NavigationLink(destination: DistanciaDetalheView()) {
+                        SensorLinha(
+                            nome: "Sensor de Distância",
+                            valor: "\(Int(viewModel.data.distancia)) cm",
+                            status: viewModel.data.distancia < 50 ? "Movimento" : "Normal",
+                            icone: "ruler.fill",
+                            cor: viewModel.data.distancia < 50 ? AppColors.amareloAtencao : AppColors.verdeSeguro
+                        )
+                    }
+                    
+                    NavigationLink(destination: RFIDView()) {
+                        SensorLinha(
+                            nome: "RFID",
+                            valor: viewModel.data.usuario,
+                            status: viewModel.data.rfidAutorizado ? "Autorizado" : "Não autorizado",
+                            icone: "person.badge.key.fill",
+                            cor: viewModel.data.rfidAutorizado ? AppColors.verdeSeguro : AppColors.amareloAtencao
+                        )
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(AppColors.fundoClaro)
+            .navigationTitle("Sensores")
+        }
+    }
+}
+
+struct SensorLinha: View {
+    var nome: String
+    var valor: String
+    var status: String
+    var icone: String
+    var cor: Color
+    
+    var body: some View {
+        HStack {
+            Image(systemName: icone)
+                .font(.title2)
+                .foregroundColor(cor)
+                .frame(width: 42)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(nome)
+                    .font(.headline)
+                    .foregroundColor(AppColors.textoPrincipal)
+                
+                Text(status)
+                    .font(.subheadline)
+                    .foregroundColor(AppColors.textoSecundario)
+            }
+            
+            Spacer()
+            
+            Text(valor)
+                .font(.headline)
+                .foregroundColor(cor)
+        }
+        .padding(.vertical, 8)
+    }
+}
+
+struct GasDetalheView: View {
+    @EnvironmentObject var viewModel: HackaGuardViewModel
+    
+    var gasStatus: String {
+        if viewModel.data.gas > 700 {
+            return "Perigo: nível alto de gás/vapor"
+        } else if viewModel.data.gas > 400 {
+            return "Atenção: nível moderado"
+        } else {
+            return "Nível normal"
+        }
+    }
+    
+    var gasColor: Color {
+        if viewModel.data.gas > 700 {
+            return AppColors.vermelhoAlerta
+        } else if viewModel.data.gas > 400 {
+            return AppColors.amareloAtencao
+        } else {
+            return AppColors.verdeSeguro
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: 25) {
+            Spacer()
+            
+            Image(systemName: "wind")
+                .font(.system(size: 90))
+                .foregroundColor(gasColor)
+            
+            Text("Gás/Vapor")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+                .foregroundColor(AppColors.textoPrincipal)
+            
+            Text("\(viewModel.data.gas)")
+                .font(.system(size: 62, weight: .bold))
+                .foregroundColor(gasColor)
+            
+            Text(gasStatus)
+                .font(.title3)
+                .multilineTextAlignment(.center)
+                .foregroundColor(AppColors.textoPrincipal)
+                .padding(.horizontal)
+            
+            ProgressView(value: Double(viewModel.data.gas), total: 1000)
+                .tint(gasColor)
+                .padding(.horizontal)
+            
+            Text("O sensor MQ-3 está sendo usado no protótipo para detectar vapores no ambiente.")
+                .font(.footnote)
+                .foregroundColor(AppColors.textoSecundario)
+                .multilineTextAlignment(.center)
+                .padding()
+            
+            Spacer()
+        }
+        .padding()
+        .background(AppColors.fundoClaro)
+        .navigationTitle("Gás")
+    }
+}
+
+struct SomDetalheView: View {
+    @EnvironmentObject var viewModel: HackaGuardViewModel
+    
+    var somStatus: String {
+        if viewModel.data.som > 600 {
+            return "Barulho alto detectado"
+        } else if viewModel.data.som > 350 {
+            return "Barulho moderado"
+        } else {
+            return "Ambiente silencioso"
+        }
+    }
+    
+    var somColor: Color {
+        if viewModel.data.som > 600 {
+            return AppColors.vermelhoAlerta
+        } else if viewModel.data.som > 350 {
+            return AppColors.amareloAtencao
+        } else {
+            return AppColors.verdeSeguro
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: 25) {
+            Spacer()
+            
+            Image(systemName: "waveform")
+                .font(.system(size: 90))
+                .foregroundColor(somColor)
+            
+            Text("Som")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+                .foregroundColor(AppColors.textoPrincipal)
+            
+            Text("\(viewModel.data.som)")
+                .font(.system(size: 62, weight: .bold))
+                .foregroundColor(somColor)
+            
+            Text(somStatus)
+                .font(.title3)
+                .multilineTextAlignment(.center)
+                .foregroundColor(AppColors.textoPrincipal)
+                .padding(.horizontal)
+            
+            ProgressView(value: Double(viewModel.data.som), total: 1000)
+                .tint(somColor)
+                .padding(.horizontal)
+            
+            Text("Esse sensor pode indicar barulhos suspeitos, batidas ou movimentações incomuns.")
+                .font(.footnote)
+                .foregroundColor(AppColors.textoSecundario)
+                .multilineTextAlignment(.center)
+                .padding()
+            
+            Spacer()
+        }
+        .padding()
+        .background(AppColors.fundoClaro)
+        .navigationTitle("Som")
+    }
+}
+
+struct DistanciaDetalheView: View {
+    @EnvironmentObject var viewModel: HackaGuardViewModel
+    
+    var distanciaStatus: String {
+        if viewModel.data.distancia < 30 {
+            return "Pessoa muito próxima da entrada"
+        } else if viewModel.data.distancia < 60 {
+            return "Movimento detectado"
+        } else {
+            return "Nenhum movimento próximo"
+        }
+    }
+    
+    var distanciaColor: Color {
+        if viewModel.data.distancia < 30 {
+            return AppColors.vermelhoAlerta
+        } else if viewModel.data.distancia < 60 {
+            return AppColors.amareloAtencao
+        } else {
+            return AppColors.verdeSeguro
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: 25) {
+            Spacer()
+            
+            Image(systemName: "ruler.fill")
+                .font(.system(size: 90))
+                .foregroundColor(distanciaColor)
+            
+            Text("Distância")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+                .foregroundColor(AppColors.textoPrincipal)
+            
+            Text("\(Int(viewModel.data.distancia)) cm")
+                .font(.system(size: 56, weight: .bold))
+                .foregroundColor(distanciaColor)
+            
+            Text(distanciaStatus)
+                .font(.title3)
+                .multilineTextAlignment(.center)
+                .foregroundColor(AppColors.textoPrincipal)
+                .padding(.horizontal)
+            
+            ProgressView(value: viewModel.data.distancia, total: 200)
+                .tint(distanciaColor)
+                .padding(.horizontal)
+            
+            Text("O sensor de distância ajuda a detectar presença próxima da entrada da casa.")
+                .font(.footnote)
+                .foregroundColor(AppColors.textoSecundario)
+                .multilineTextAlignment(.center)
+                .padding()
+            
+            Spacer()
+        }
+        .padding()
+        .background(AppColors.fundoClaro)
+        .navigationTitle("Distância")
+    }
+}
+
+struct RFIDView: View {
+    @EnvironmentObject var viewModel: HackaGuardViewModel
+    
+    @State private var nomeNovoMorador = ""
+    @State private var codigoRFID = ""
+    
+    @State private var moradores: [String] = [
+        "Andrew - A1:B2:C3:D4",
+        "Morador 2 - E5:F6:G7:H8"
+    ]
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 20) {
+                    VStack(spacing: 14) {
+                        Image(systemName: "person.badge.key.fill")
+                            .font(.system(size: 75))
+                            .foregroundColor(viewModel.data.rfidAutorizado ? AppColors.verdeSeguro : AppColors.amareloAtencao)
+                        
+                        Text("Acesso RFID")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .foregroundColor(AppColors.textoPrincipal)
+                        
+                        Text(viewModel.data.rfidAutorizado ? "Acesso autorizado" : "Aguardando identificação")
+                            .font(.headline)
+                            .foregroundColor(viewModel.data.rfidAutorizado ? AppColors.verdeSeguro : AppColors.amareloAtencao)
+                        
+                        Text("Usuário: \(viewModel.data.usuario)")
+                            .foregroundColor(AppColors.textoSecundario)
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(AppColors.branco)
+                    .cornerRadius(24)
+                    
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Cadastrar morador")
+                            .font(.headline)
+                            .foregroundColor(AppColors.textoPrincipal)
+                        
+                        Text("1. Digite o nome do morador")
+                            .font(.caption)
+                            .foregroundColor(AppColors.textoSecundario)
+                        
+                        TextField("Nome do morador", text: $nomeNovoMorador)
+                            .textFieldStyle(.roundedBorder)
+                        
+                        Text("2. Informe ou aproxime a tag RFID")
+                            .font(.caption)
+                            .foregroundColor(AppColors.textoSecundario)
+                        
+                        TextField("Código RFID", text: $codigoRFID)
+                            .textFieldStyle(.roundedBorder)
+                        
+                        Button {
+                            if !nomeNovoMorador.isEmpty && !codigoRFID.isEmpty {
+                                moradores.append("\(nomeNovoMorador) - \(codigoRFID)")
+                                viewModel.adicionarEvento(
+                                    tipo: "RFID",
+                                    titulo: "Novo morador cadastrado",
+                                    descricao: "\(nomeNovoMorador) foi cadastrado no sistema",
+                                    cor: AppColors.azulMarca,
+                                    icone: "person.badge.plus"
+                                )
+                                nomeNovoMorador = ""
+                                codigoRFID = ""
+                            }
+                        } label: {
+                            Text("Salvar morador")
+                                .fontWeight(.bold)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(AppColors.azulMarca)
+                                .foregroundColor(AppColors.branco)
+                                .cornerRadius(14)
+                        }
+                    }
+                    .padding()
+                    .background(AppColors.branco)
+                    .cornerRadius(20)
+                    
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Moradores cadastrados")
+                            .font(.headline)
+                            .foregroundColor(AppColors.textoPrincipal)
+                        
+                        ForEach(moradores, id: \.self) { morador in
+                            HStack {
+                                Image(systemName: "person.fill")
+                                    .foregroundColor(AppColors.azulMarca)
+                                
+                                Text(morador)
+                                    .font(.subheadline)
+                                    .foregroundColor(AppColors.textoPrincipal)
+                                
+                                Spacer()
+                            }
+                            .padding()
+                            .background(AppColors.cardClaro)
+                            .cornerRadius(12)
+                        }
+                    }
+                    .padding()
+                    .background(AppColors.branco)
+                    .cornerRadius(20)
+                }
+                .padding()
+            }
+            .background(AppColors.fundoClaro)
+            .navigationTitle("RFID")
+        }
+    }
+}
+
+struct HistoricoView: View {
+    @EnvironmentObject var viewModel: HackaGuardViewModel
+    @State private var filtroSelecionado = "Todos"
+    
+    let filtros = ["Todos", "Acesso", "Alerta", "Sensor", "Sistema"]
+    
+    var eventosFiltrados: [EventoHistorico] {
+        if filtroSelecionado == "Todos" {
+            return viewModel.historico
+        } else {
+            return viewModel.historico.filter { $0.tipo == filtroSelecionado }
+        }
+    }
+    
+    var body: some View {
+        NavigationView {
+            VStack {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack {
+                        ForEach(filtros, id: \.self) { filtro in
+                            Button {
+                                filtroSelecionado = filtro
+                            } label: {
+                                Text(filtro)
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 9)
+                                    .background(filtroSelecionado == filtro ? AppColors.azulMarca : AppColors.cardClaro)
+                                    .foregroundColor(filtroSelecionado == filtro ? AppColors.branco : AppColors.textoPrincipal)
+                                    .cornerRadius(20)
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.top)
+                }
+                
+                List {
+                    ForEach(eventosFiltrados) { evento in
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: evento.icone)
+                                .foregroundColor(evento.cor)
+                                .frame(width: 32, height: 32)
+                                .background(evento.cor.opacity(0.13))
+                                .cornerRadius(10)
+                            
+                            VStack(alignment: .leading, spacing: 5) {
+                                HStack {
+                                    Text(evento.titulo)
+                                        .font(.headline)
+                                        .foregroundColor(AppColors.textoPrincipal)
+                                    
+                                    Spacer()
+                                    
+                                    Text(evento.horario)
+                                        .font(.caption)
+                                        .foregroundColor(AppColors.textoSecundario)
+                                }
+                                
+                                Text(evento.descricao)
+                                    .font(.subheadline)
+                                    .foregroundColor(AppColors.textoSecundario)
+                                
+                                Text(evento.tipo)
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(evento.cor)
+                            }
+                        }
+                        .padding(.vertical, 6)
+                    }
+                }
+                .scrollContentBackground(.hidden)
+                .background(AppColors.fundoClaro)
+            }
+            .background(AppColors.fundoClaro)
+            .navigationTitle("Histórico")
+        }
+    }
+}
+
+#Preview {
+    ContentView()
+}
